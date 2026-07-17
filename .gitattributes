@@ -1,0 +1,7 @@
+# Macros only take effect in the repo-root .gitattributes; pantoDashUnity/.gitattributes
+# uses them but can no longer define them now that the Unity project is a subdirectory.
+# ponytail: [attr]lfs deliberately left undefined — the project has no large binaries
+# (~0.4 MB total), so the template's `lfs` marks stay inert no-ops. Define it, and run
+# `git lfs migrate`, only if real art assets land here.
+[attr]unity-json        eol=lf linguist-language=json
+[attr]unity-yaml        merge=unityyamlmerge eol=lf linguist-language=yaml

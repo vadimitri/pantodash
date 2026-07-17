@@ -1,0 +1,4 @@
+[submodule "pantoDashUnity/Assets/unity-dualpanto-toolkit"]
+	path = pantoDashUnity/Assets/unity-dualpanto-toolkit
+	url = https://github.com/HassoPlattnerInstituteHCI/unity-dualpanto-toolkit
+	branch = develop
