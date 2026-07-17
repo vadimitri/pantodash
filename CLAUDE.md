@@ -34,7 +34,10 @@ with a monster on the it-handle.
 
 ## Repo map (working dir: /Users/vadim/Developer/HPI/BIS)
 
-- `pantodash/` — THIS project: `Scripts/` (game code, copy into Unity),
+- `pantodash/` — THIS project, and since 2026-07-17 **its own git repo**, public
+  at `github.com/vadimitri/pantodash` (branch `main`). It is nested inside the
+  private `BIS` repo but independent of it — commit and push from
+  `pantodash/`, never from `BIS`. Contains: `Scripts/` (game code, copy into Unity),
   `GUIDE.md`, `CLAUDE.md`. Unity project lives at `pantodash/PantodashUnity/`.
 - `unity-dualpanto-toolkit/` (branch `develop`) — the Unity toolkit. Read-only
   reference; consumed as a git submodule inside the Unity project.
@@ -204,6 +207,20 @@ with a monster on the it-handle.
   — neutralized the stale-Denied approval gate (`if (false && ...Denied)`),
   same patch as archive/tomb-dualpanto-toolkit; regenerated if PackageCache
   re-resolves.
+- 2026-07-17 (repo): `pantodash/` is now a standalone **public** repo
+  (`vadimitri/pantodash`, branch `main`) so a friend can collaborate. Unity Hub's
+  throwaway repo (`pantoDashUnity-2026-07-16_21-52-01`, private, 1 boilerplate
+  commit) is abandoned — its `.git` was deleted and the toolkit re-added as a
+  submodule at `pantoDashUnity/Assets/unity-dualpanto-toolkit` (https URL, branch
+  `develop`, pin 5e6d293); SpeechIO stays nested inside it. Gotchas that bit and
+  are now fixed: Unity's `.gitattributes` **macros only work in the repo-root
+  file**, so they moved to `pantodash/.gitattributes` (else `unityyamlmerge` on
+  scenes silently stops applying — matters with two people editing scenes);
+  `[attr]lfs` is deliberately left undefined (no large binaries; defining it
+  marks `*.png`/`*.fbx` as LFS in a repo with no LFS objects → clone warnings).
+  `pantoDashUnity/.gitignore` keeps working in place because leading-slash rules
+  anchor to their own directory, so `Library/` (2.9 GB) stays excluded.
+  Verified by fresh `git clone --recursive`.
 - **NEXT (start here):** verify via unity-mcp: compile clean, hardware run —
   park at start node, press-to-dash, nodes/points visible. Then Levels 2+3
   on hardware.
