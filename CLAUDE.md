@@ -353,19 +353,32 @@ with a monster on the it-handle.
   way to the next node; the auto-recenter+dwell now carry hardware robustness
   so the threshold can stay small). Scene YAML pressThreshold→1. Compile
   clean, 0 errors. NOT yet re-run.
-- **NEXT (start here):** device run (restart Editor first if scripts
-  recompiled since last Play — BUGS.md #10). Verify: parks at start node, the
-  hold buzz no longer dashes on its own, a real ≥1.5 cm sustained push dashes
-  exactly one segment, dashes end quickly (not a 2 s crawl), monster handle
-  tracks smoothly, pickups blop. Tune on the Player object: **recenterRate**
-  (raise if it still self-dashes / drifts into dashes; lower if it "eats" a
-  slow deliberate push), pressThreshold (raise if ambient motion still
-  crosses it), dwellMs (fast-spike rejection), settleMs, dashSpeed
-  (fraction/s, raise = faster travel), cooldown. If it NEVER dashes on
-  hardware, recenterRate is too high (tracking out the push) — drop it toward
-  2. Then enlarge levels by moving nodes (track is
-  10×6 cm of 36×21 cm workspace), then Levels 2+3. logPress is ON — turn off
-  once tuned.
+- 2026-07-20 (emulator regression → reverted DashController): the whole
+  07-19 buzz-fighting rework (recenter/dwell/averaged-holdPos/arming, all
+  NEVER verified on device) broke debug/emulator mode. Decision (Vadim):
+  restore the emulator-verified guide-style DashController, keep the clean
+  no-scaling architecture. **Git set up properly now**: the buzz rework is
+  committed on branch **`hardware-experiment`** (recoverable when back at the
+  device); `main` (commit `de6de30`) has the guide-style two-state
+  DashController (TA SwitchTo + per-frame MoveTowards drive; fields:
+  pressThreshold/maxAngle/dashSpeed[Unity u/s]/switchToSpeed/cooldown/
+  freezeAtNodes/logPress) paired with the clean GameManager (ApplyHardwareFit
+  stays deleted, 1 unit = 1 cm) + TrackNode corridor bars + MonsterController
+  TweeningEnded/switchToSpeed100. Scene DashController reconciled to the guide
+  fields: **freezeAtNodes 0** (untick = emulator), dashSpeed 15, switchToSpeed
+  20 (buzz-only fields dwellMs/recenterRate/settleMs/maxDashSeconds removed).
+  Not re-run since the edit; guide DashController compiled clean at HEAD, only
+  the scene scalar edit is new. `_Recovery/` crash copies still on disk
+  (untracked) — delete once the scene is confirmed good.
+- **NEXT (start here):** run the EMULATOR (DualPantoSync.debug on, Panto
+  object). freezeAtNodes is already 0 in the scene. Verify: parks at start
+  node, LEFT-drag the me-handle past pressThreshold toward a neighbor → dashes
+  one segment, pickups blop, win advances to level 2 and the handle is movable
+  there (the pre-existing level-2 lock is fixed in this DashController's
+  always-run Hold). Then the HARDWARE path is the `hardware-experiment` branch
+  (tick freezeAtNodes); tune recenterRate/pressThreshold/dwellMs there when at
+  the device. Then enlarge levels by moving nodes (track is 10×6 cm of
+  36×21 cm workspace), then Levels 2+3. logPress is ON — turn off once tuned.
 
 Update the State section when you finish or learn something; keep the rest
 stable.
