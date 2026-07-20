@@ -95,21 +95,23 @@ namespace PantoDash
         {
             dashing = true;
             current = target;
-            handle.Free(); // un-freeze; SwitchTo below re-attaches tracking
-            // Must AWAIT: on hardware PantoHandle.FixedUpdate only re-sends the
-            // moving object's position while !inTransition, and SwitchTo holds
-            // inTransition=true until it returns. Fire-and-forget here leaves it
-            // stuck true for the whole dash → firmware never hears the object
-            // move → no dash. Emulator chases regardless, hiding the bug.
-            await handle.SwitchTo(gameObject, switchToSpeed);
             Vector3 goal = target.transform.position;
-            while (transform.position != goal)
+            // Dead simple: move the tracked object straight onto the target node
+            // and hand the firmware that one destination via SwitchTo. The firmware
+            // (and the emulator's chase) drives the handle there — no gradual
+            // MoveTowards, no reliance on inTransition/TRANSITION_ENDED re-sends.
+            transform.position = goal;
+            handle.Free();
+            _ = handle.SwitchTo(gameObject, switchToSpeed);
+            // Collect pickups while the handle travels the segment.
+            float deadline = Time.time + 3f;
+            while (Vector3.Distance(handle.GetPosition(), goal) > pressThreshold * 0.5f
+                   && Time.time < deadline)
             {
                 if (gm.GameOver) { dashing = false; return; } // killed mid-dash
-                transform.position = Vector3.MoveTowards(transform.position, goal, dashSpeed * Time.deltaTime);
+                gm.CheckPickups(handle.GetPosition());
                 await Task.Yield();
             }
-            await WaitForHandle();
             Hold();
             dashing = false;
         }
