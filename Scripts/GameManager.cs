@@ -59,6 +59,13 @@ namespace PantoDash
             await player.ParkAt(level.startNode);
             GameOver = false;
             await speech.Speak(level.introText);
+            // Level 1 tutorial: after a 2s beat, auto-drive the handle right so the
+            // "dash to the right and collect points" mechanic triggers on its own.
+            if (i == 0)
+            {
+                await Task.Delay(2000);
+                player.AutoDemoDashRight();
+            }
         }
 
         // Levels are authored small so they fit the emulator camera and mouse. On the

@@ -37,6 +37,7 @@ namespace PantoDash
 
         UpperHandle handle;
         GameManager gm;
+        GameObject guide; // temp target the handle tracks during the level-1 demo
         bool dashing;
         float cooldownUntil;
 
@@ -44,6 +45,27 @@ namespace PantoDash
         {
             handle = GameObject.Find("Panto").GetComponent<UpperHandle>();
             gm = FindFirstObjectByType<GameManager>();
+            guide = new GameObject("DashGuide");
+        }
+
+        // Level-1 tutorial: from the current (start) node, drive the handle a bit
+        // to the right — past pressThreshold — so the normal Update press-detection
+        // fires a rightward dash on its own (collecting the points en route).
+        public void AutoDemoDashRight()
+        {
+            if (current == null) return;
+            TrackNode right = null;
+            float bestDx = 0.01f;
+            foreach (var n in current.neighbors)
+            {
+                float dx = n.transform.position.x - current.transform.position.x;
+                if (dx > bestDx) { bestDx = dx; right = n; }
+            }
+            if (right == null) return;
+            Vector3 dir = (right.transform.position - current.transform.position).normalized;
+            guide.transform.position = current.transform.position + dir * (pressThreshold * 1.5f);
+            handle.Free();
+            _ = handle.SwitchTo(guide, switchToSpeed);
         }
 
         // Called by GameManager on level (re)start.
