@@ -69,8 +69,7 @@ namespace PantoDash
             current = node;
             handle.Free(); // clear any stale freeze so tracking works
             transform.position = node.transform.position;
-            await handle.SwitchTo(gameObject, switchToSpeed);
-            await WaitForHandle();
+            await handle.MoveToPosition(node.transform.position, switchToSpeed, true); // tween there, Free after
             Hold();
             dashing = false;
         }
@@ -112,13 +111,10 @@ namespace PantoDash
             dashing = true;
             current = target;
             Vector3 goal = target.transform.position;
-            // Dead simple: move the tracked object straight onto the target node
-            // and hand the firmware that one destination via SwitchTo. The firmware
-            // (and the emulator's chase) drives the handle there — no gradual
-            // MoveTowards, no reliance on inTransition/TRANSITION_ENDED re-sends.
-            transform.position = goal;
+            // Position-tween the handle straight to the node, then Free (the
+            // shouldFreeHandle:true arg makes MoveToPosition call Free() at the end).
             handle.Free();
-            _ = handle.SwitchTo(gameObject, switchToSpeed);
+            _ = handle.MoveToPosition(goal, switchToSpeed, true);
             // Collect pickups while the handle travels the segment.
             float deadline = Time.time + 3f;
             while (Vector3.Distance(handle.GetPosition(), goal) > pressThreshold * 0.5f
@@ -130,16 +126,6 @@ namespace PantoDash
             }
             Hold();
             dashing = false;
-        }
-
-        // The physical handle lags this object; don't freeze until it caught up
-        // or Freeze() pins it short of the node.
-        async Task WaitForHandle()
-        {
-            float deadline = Time.time + 3f;
-            float arrive = pressThreshold * 0.5f;
-            while (Vector3.Distance(handle.GetPosition(), transform.position) > arrive && Time.time < deadline)
-                await Task.Yield();
         }
 
         void Hold()
