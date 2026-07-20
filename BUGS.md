@@ -116,6 +116,92 @@ non-obvious failure goes here with repro + suggested fix. Newest last.
 - **Suggested fix:** `close(fd)` on all error paths in `setup()`; in
   `SetPort()` call `Close(Handle)` first if `Handle != 0`.
 
+## 9. Firmware never sends TRANSITION_ENDED for a zero-distance tween — SwitchTo hangs 3s — MEDIUM, report
+
+- **Where:** `PantoHandle.SwitchTo` sends one tween to the target's current
+  position, then busy-waits on `inTransition` until `TweeningEnded()` (fired
+  by the TRANSITION_ENDED packet), giving up after 3s. If the target object
+  starts at the handle's own position (the natural pattern for
+  "attach handle to player object, then move the object"), the tween is
+  zero-distance and the firmware never fires TRANSITION_ENDED.
+- **Symptom:** `inTransition` stays true for 3s ("Abandoning gameobject that
+  couldn't be reached"), and during those 3s the `FixedUpdate` follow branch
+  (`!inTransition && !isFrozen`) is gated off — the handle silently ignores
+  the object it was just switched to. If the game calls `Freeze()` within
+  those 3s, tracking never engages at all. Observed live: me-handle never
+  parked, dashes did nothing.
+- **Workaround:** call the public `handle.TweeningEnded()` immediately after
+  `SwitchTo(obj, speed)` when the object starts at the handle position.
+- **Suggested fix:** firmware should acknowledge zero-distance tweens with
+  TRANSITION_ENDED (or `SwitchTo` should skip the transition wait when the
+  target is already within epsilon of the handle).
+
+## 10. Editor hard-crash (SEGV) in libserial `CppLib::poll()` on second Play after recompile — HIGH, report
+
+- **Where:** native plugin `Assets/Resources/libserial.dylib`, `CppLib::poll()`
+  called from `DualPantoSync.Update()` → `Poll` (DualPantoSync.cs:485).
+- **Repro:** with the device connected — Play (session works, device syncs),
+  Stop, recompile scripts (domain reload), Play again → entire Unity Editor
+  segfaults ("Got a segv while executing native code", crash reporter opens).
+- **Cause (likely):** the native plugin outlives Play mode and the domain
+  reload, keeping serial/session state from run 1; run 2 re-opens the port
+  and `poll()` touches the stale state. Related to the fd-handling sloppiness
+  in bug #8 but distinct: this is a crash, not a failed open.
+- **Workaround:** restart the Unity Editor between device Play sessions after
+  any script change (annoying but reliable).
+- **Suggested fix:** reset/close all native session state in
+  `DualPantoSync.OnDestroy`/`OnApplicationQuit` and guard `poll()` against a
+  closed handle.
+
+## 11. PantoHandle.FixedUpdate re-sends a full position tween every physics tick while tracking — serial flood on fast moves — HIGH, report
+
+- **Where:** `PantoHandle.FixedUpdate` (PantoHandle.cs:312-315): while
+  `handledGameObject != null && !inTransition && !isFrozen`, it calls
+  `UpdateHandlePosition(...)` → `SendMotor` (mode 0, a complete firmware
+  position tween) every FixedUpdate, ~50/s, whether or not the target moved.
+- **Symptom:** using SwitchTo + moving the object fast (a dash) spams ~50
+  tween targets/second — the serial flood that desyncs packet IDs / the god
+  object; felt as juddering/oscillation at the handle. Fine only for the slow
+  NPC-chase pattern (bis-rogue moves its enemy at 0.2 u/s).
+- **Suggested fix:** re-send only when the target moved more than an epsilon
+  and/or rate-limit; or expose a "set target once" mode for one-shot tweens.
+
+## 12. SwitchTo's inTransition gate contradicts the FixedUpdate follow mechanism — MEDIUM, report
+
+- **Where:** `SwitchTo` sets `inTransition = true` until TRANSITION_ENDED
+  (or 3s timeout); `FixedUpdate`'s follow branch is gated on `!inTransition`.
+- **Symptom:** the documented pattern "SwitchTo(obj) then move the object"
+  doesn't track on hardware until TRANSITION_ENDED arrives — and never
+  arrives for a zero-distance initial tween (bug #9) — so the handle is dead
+  for up to 3s after every fire-and-forget SwitchTo. The two mechanisms
+  (one-shot transition await vs continuous follow) actively fight each other.
+- **Note:** the gate is also the only thing *preventing* the bug-#11 flood
+  during the initial tween — fixing either should consider both.
+
+## 13. Firmware TRANSITION_ENDED (0x93) is undocumented — LOW, report
+
+- **Where:** `documentation/protocol/protocol.md:298-300` lists 0x93 with no
+  description of when it fires; empirically it does NOT fire for
+  zero-distance tweens (bug #9).
+- **Suggested fix:** document the exact trigger condition.
+
+## 14. Frozen me-handle physically buzzes — derivative gain amplifies encoder noise — MEDIUM, report
+
+- **Where:** `firmware/src/config/config.cpp` — `pidFactor` for the me-handle
+  motors is `{Kp=6, Ki=0, Kd=600}`. `receiveFreeze` (`serial.cpp:476`) pins
+  the god object to the current pos and holds it with this PD controller.
+- **Symptom:** a frozen handle isn't dead still — the very large Kd multiplies
+  encoder-velocity quantization noise into a rendered force, so the handle
+  buzzes/jitters around the freeze point. If a game measures "how hard is the
+  user pushing" as `|handle − holdPos|` (pantodash's whole mechanic), that
+  buzz reads as phantom pushes and can spuriously trigger actions.
+- **Workaround (game side):** don't measure press against a single freeze
+  sample — average over a settle window for the baseline — and require a
+  push to be sustained (temporal debounce) and above the buzz amplitude
+  before acting. Done in pantodash DashController.
+- **Suggested fix:** low-pass the derivative term, or expose per-game Kd, or
+  document that a frozen handle has a noise floor games must filter.
+
 ## Not toolkit bugs, but student-facing traps (mention in course docs)
 
 - Unity template pins `com.unity.inputsystem: 1.12.0`, incompatible with

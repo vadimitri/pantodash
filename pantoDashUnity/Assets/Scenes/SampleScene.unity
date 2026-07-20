@@ -378,10 +378,6 @@ MonoBehaviour:
   - {fileID: 488519093}
   blopClip: {fileID: 8300000, guid: 428caa1be8f184f2598f815d501f5ed0, type: 3}
   pickupRadius: 0.6
-  hardwareScale: 7
-  hardwareZShift: 30
-  hardwareDashSpeed: 2
-  hardwarePressThreshold: 3
 --- !u!4 &214369004
 Transform:
   m_ObjectHideFlags: 0
@@ -531,6 +527,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 199081147454446092, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
+      propertyPath: orthographic size
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 199081147454446092, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
+      propertyPath: m_CullingMask.m_Bits
+      value: 4294967295
+      objectReference: {fileID: 0}
     - target: {fileID: 826605487606422808, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
       propertyPath: debug
       value: 0
@@ -586,6 +590,14 @@ PrefabInstance:
     - target: {fileID: 3801158577767249954, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
       propertyPath: enhancedBlindView.m_Bits
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6877265631522948577, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6877265631522948577, guid: f08d327e9fb42f94d97ba9d1d226d418, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2325,7 +2337,7 @@ MonoBehaviour:
   startNode: {fileID: 597419578}
   speed: 3
   killRadius: 0.8
-  switchToSpeed: 20
+  switchToSpeed: 100
 --- !u!65 &1834602959
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -2532,10 +2544,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PantoDash.DashController
   pressThreshold: 1
   maxAngle: 45
-  dashSpeed: 30
+  dashSpeed: 15
+  switchToSpeed: 20
   cooldown: 0.4
-  freezeAtNodes: 1
-  logPress: 0
+  freezeAtNodes: 0
+  logPress: 1
   current: {fileID: 0}
 --- !u!4 &1842662766
 Transform:

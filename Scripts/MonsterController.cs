@@ -12,7 +12,11 @@ namespace PantoDash
         public TrackNode startNode;
         public float speed = 3f;
         public float killRadius = 0.8f;
-        public float switchToSpeed = 20f;
+        // The it-handle follows this object via PantoHandle.FixedUpdate's 50 Hz
+        // position re-send, which moves the firmware motor at whatever SetSpeed
+        // SwitchTo last set. Too low = the handle lags the moving monster =
+        // "stepping". bis-rogue uses the max (100) for exactly this follow role.
+        public float switchToSpeed = 100f;
 
         LowerHandle itHandle;
         DashController player;
@@ -27,6 +31,10 @@ namespace PantoDash
             transform.position = startNode.transform.position;
             target = startNode;
             _ = itHandle.SwitchTo(gameObject, switchToSpeed);
+            // Un-gate the FixedUpdate slow-chase immediately: fire-and-forget
+            // SwitchTo leaves inTransition true (up to 3s if TRANSITION_ENDED
+            // doesn't fire), during which the it-handle would be dead (BUGS.md #9).
+            itHandle.TweeningEnded();
         }
 
         void OnDisable()

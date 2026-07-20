@@ -67,6 +67,12 @@ with a monster on the it-handle.
 - `DualPantoSync` on GameObject named **"Panto"** — serial bridge; everything
   does `GameObject.Find("Panto")`. `debug=true` = mouse emulator (key `b`
   cycles blind/mixed/dev view). Port defaults: `/dev/cu.SLAB_USBtoUART` (mac).
+- **Coordinate mapping (verified in DualPantoSync.PantoToUnity): `unity =
+  device_mm/10 × PantoRoot.localScale + PantoRoot.position`. NEVER scale or
+  move the Panto root** — it silently redefines the whole workspace. At the
+  prefab default (scale 1, pos 0): **1 Unity unit = 1 cm physical**, workspace
+  = x∈[−18,18], z∈[−20.5,+0.5] (pantoBounds "ember": 360×210mm centered
+  (0,−100)). Emulator and hardware use the SAME coordinates.
 - `UpperHandle` / `LowerHandle` (both on the Panto object):
   - `Vector3 GetPosition()` — physical handle position (penetrates walls)
   - `async Task MoveToPosition(Vector3, float speed = 1, bool shouldFreeHandle = true)`
@@ -91,13 +97,25 @@ with a monster on the it-handle.
    "Skipping god object" crashes).
 2. **One scene, three level roots** toggled by GameManager. No Unity scene
    loads → panto connection never disturbed, no toolkit SceneManager needed.
-3. **Dash = awaited `MoveToPosition(node, dashSpeed, false)` + `Freeze()`**;
+3. **Me-handle is command-silent (rewritten 2026-07-19 per archived/HANDLING.md).**
+   PARKED = Freeze + no handledGameObject → zero serial traffic; press measured
+   from settled `holdPos`. DASH = snap Player transform to target, ONE
+   fire-and-forget `SwitchTo(gameObject, dashSpeed)` (inTransition staying true
+   deliberately gates OFF PantoHandle.FixedUpdate's 50 Hz re-send = BUGS.md
+   #11 flood), poll `GetPosition()` for arrival (never depends on
+   TRANSITION_ENDED), then Free+TweeningEnded+Freeze+settle. `dashSpeed` is
+   the firmware 0x92 speed = fraction-of-move/second (3 ≈ 0.33 s dash);
    pickups = per-frame distance checks while dashing (no Unity physics).
 4. Monster drives a GameObject along the graph (greedy chase);
    `LowerHandle.SwitchTo(monster)` makes the it-handle track it physically.
 5. Fresh repo base; toolkit + SpeechIO as submodules. Nothing copied from
    bis-rogue (its game code is dungeon machinery; only its *patterns* were
    used: SwitchTo-driven enemy, speech intro, MoveToPosition haptics).
+6. **Levels are authored in real device coordinates (1 unit = 1 cm) directly
+   in the scene; there is NO runtime scaling.** ApplyHardwareFit and all
+   hardware* tuning fields were deleted 2026-07-17 — they only ever
+   compensated for a wrong 3.1/3.8 scale on the Panto root (now reverted).
+   Want a bigger track? Move the nodes in the scene, nothing else.
 
 ## Pitfalls / open risks
 
@@ -221,9 +239,133 @@ with a monster on the it-handle.
   `pantoDashUnity/.gitignore` keeps working in place because leading-slash rules
   anchor to their own directory, so `Library/` (2.9 GB) stays excluded.
   Verified by fresh `git clone --recursive`.
-- **NEXT (start here):** verify via unity-mcp: compile clean, hardware run —
-  park at start node, press-to-dash, nodes/points visible. Then Levels 2+3
-  on hardware.
+- 2026-07-17 (scale rethink): The "workspace = x±56, z−78..2 (Panto prefab
+  scale 3.1/3.8)" finding was an ARTIFACT — someone had copied the
+  EmberWorkingArea child's 3.1/3.8 scale onto the Panto ROOT, which rescales
+  the device↔Unity mapping itself (see Toolkit API section). Root reverted to
+  scale 1 → workspace is x∈[−18,18], z∈[−20.5,+0.5], 1 unit = 1 cm, and the
+  authored levels (x±5, z−13..−7 ≈ 10×6 cm patch, centered) fit as-is.
+  Deleted ApplyHardwareFit + hardwareScale/ZShift/DashSpeed/PressThreshold
+  from GameManager (design decision 6); existing DashController defaults are
+  already physical: pressThreshold 1 = 1 cm push, dashSpeed 15 = 15 cm/s.
+  Camera fixed in the SCENE (instance override, not the prefab): (0,10,−10),
+  ortho 12, cullingMask Everything — nodes/corridors/handles visible in play
+  in both modes; `b` still cycles blind views. TrackNode.Start now also
+  spawns corridor bars (thin stretched cubes to each neighbor, lower-ID node
+  draws) alongside the node spheres (bumped to 0.8). Compile verified clean
+  via unity-mcp.
+- 2026-07-17 (hardware debug, live via unity-mcp): "park never happens /
+  dash doesn't dash / oscillates at node" root-caused from console logs:
+  `SwitchTo(Player)` tween is ZERO-distance (object starts at handle pos) and
+  firmware never fires TRANSITION_ENDED for a no-op move → `inTransition`
+  stuck true 3s ("Abandoning gameobject: Player") → PantoHandle.FixedUpdate
+  chase (gated on `!inTransition && !isFrozen`) never engaged; our Freeze()
+  landed within the 3s and gated it off permanently. Fix: DashController.
+  MoveAlongTrack calls public `handle.TweeningEnded()` right after SwitchTo
+  (BUGS.md #9). NOT yet verified on device — Editor segfaulted on the retest
+  run: native crash in libserial `CppLib::poll()` on the SECOND Play after a
+  recompile (BUGS.md #10). **New pitfall: with the device attached, restart
+  the Unity Editor between Play sessions whenever scripts recompiled** —
+  the native plugin's stale serial state segfaults the whole Editor.
+- 2026-07-19: DashController REWRITTEN per `archived/HANDLING.md` research
+  (design decision 3 updated — read it). Old TweeningEnded-hack + per-frame
+  MoveTowards drive (a 50 Hz tween flood, the oscillation source) deleted;
+  now: park = Freeze + silence, dash = one firmware tween + arrival poll +
+  settle(120 ms) before sampling holdPos, edge-trigger re-arm (press must
+  relax below 0.6×threshold before next dash; kills chain-dashing).
+  `switchToSpeed` field removed; `dashSpeed` is now the firmware
+  fraction-per-second speed, default/scene value 3 (was 30 = 66 ms slam).
+  Scene YAML updated by hand (dashSpeed 3, settleMs 120, maxDashSeconds 2).
+  MonsterController: `TweeningEnded()` right after its fire-and-forget
+  SwitchTo (kills the 3 s dead it-handle). BUGS.md #11 (FixedUpdate re-send
+  flood), #12 (inTransition vs follow contradiction), #13 (0x93 undocumented)
+  recorded. Compile verified via unity-mcp (only known cosmetic
+  nsspeechforunity duplicate-plugin errors). NOT yet run on device.
+  Note: `Assets/_Recovery/` holds crash-recovered scene copies from today's
+  segfaults (BUGS.md #10) — ignore/delete once the scene is confirmed good.
+- 2026-07-19 (whole-stack pass on the oscillation/broken-dash/steppy-monster
+  report; HANDLING.md no longer exists — worked from firmware + toolkit
+  source directly). Root causes traced through firmware:
+  (a) **Oscillation = the frozen hold's own physical BUZZ.** Firmware
+  `config.cpp` me-handle motors are `pidFactor {Kp=6, Kd=600}`; the huge
+  derivative gain turns encoder-velocity noise into force → a stiff buzz
+  around the freeze point. We send nothing while PARKED, so this is firmware
+  config on shared hardware — NOT ours to damp. Logged BUGS.md #14. Fix is to
+  make the DASH TRIGGER immune: DashController now (1) raises pressThreshold
+  1→1.5 cm (above buzz floor), (2) adds a **dwell** (`dwellMs=90`: the same
+  aligned over-threshold push must persist before firing — a buzz spike is
+  brief / flips segment, a real push is held) — THIS is what stops the buzz
+  from dashing, (3) captures holdPos as an **average** over the settle window
+  (single sample caught the buzz at a random phase → biased baseline → phantom
+  press). BestSegment extracted from Update.
+  (b) **Broken/laggy dash = arrival never detected.** Old poll exited only on
+  `dist ≤ eps` with eps≈0.2–0.5 cm, tighter than firmware settle precision →
+  most dashes ran to the 2 s maxDashSeconds timeout. New `PollArrival`: eps
+  0.8 cm + a **stall detector** (handle stopped moving 150 ms = arrived/stuck)
+  → dashes end promptly. Also dropped the `Free()`→`Freeze()` release-regrab at
+  arrival (limp window let the hold land off-baseline); now Freeze directly
+  (Freeze then TweeningEnded; isFrozen gates the re-send). The single motor
+  release now happens only at dash START (`handle.Free()` before SwitchTo).
+  (c) **Steppy it-handle monster = switchToSpeed 20.** The follow is
+  PantoHandle.FixedUpdate's 50 Hz position re-send moving the motor at the
+  SetSpeed SwitchTo set once; 20 lags the moving monster. bis-rogue uses 100
+  for its follow handle → bumped to 100. AI (greedy chase) left as-is; at
+  figure-8 junctions it can still thrash between neighbors (possible
+  follow-up, not touched).
+  Scene YAML patched (serialized values override C# defaults): pressThreshold
+  1.5, dwellMs 90, settleMs 200, switchToSpeed 100. Compile clean via
+  unity-mcp, 0 console errors.
+- 2026-07-19 (device run #1 of the above — two regressions + a re-diagnosis):
+  (i) The `PollArrival` **stall detector I added broke the initial park**: at
+  game start the handle is stationary until the firmware starts moving it, so
+  "not moving 150 ms = arrived" false-fired immediately and froze at the REST
+  position → "didn't go to the start node itself", worse on farther level-2
+  nodes → "dash didn't work in level 2". REMOVED the stall detector;
+  PollArrival is now just eps 0.8 cm + maxDashSeconds cap.
+  (ii) Re-diagnosis of the "oscillation": it's SLOW and self-dashes, but an
+  overdamped hold (Kd 600 ≫ Kp 6) can't physically oscillate slowly — so the
+  "oscillation" is really a **self-dash LOOP** (dash to neighbor → re-baseline
+  slightly off → dash back, ~1 s/cycle). A static threshold+dwell can't stop
+  it; dwell only rejects FAST spikes. Fix: **auto-recentering baseline
+  deadband** in Update — while |press| < 0.4×threshold, slide holdPos toward
+  the handle (`recenterRate`=4/s, hardware only) so drift/slow-oscillation is
+  absorbed and can never accumulate into a phantom press; reaching the deadband
+  is also the re-arm condition, so after a dash the handle must go quiet near
+  the new node before it can dash again (breaks the loop). A deliberate push
+  leaves the deadband fast → baseline freezes → press builds → dwell → dash.
+  Compile clean, 0 errors.
+- 2026-07-19 (emulator run — found the "can't move the handle in level 2 at
+  all" bug, PRE-EXISTING in the level flow): `GameManager.Win()` sets
+  `GameOver=true`, then `StartLevel(next)` does `await player.ParkAt(...)`
+  while GameOver is STILL true (it's cleared only AFTER the park, line 49→50).
+  Old `DashTo` did `SwitchTo` (→ handle tracking; in the emulator that sets
+  userControlledPosition=false so the mouse can't drag it) and then
+  `if (gm.GameOver) return;` SKIPPED `Hold()` — the only place that calls
+  `Free()` to hand control back. So level 2's handle was left frozen to the
+  Player object: unmovable AND un-dashable. Level 1 worked only because its
+  first park runs before any win. Fix in DashController (NOT GameManager):
+  `Hold()` now ALWAYS runs (never leave the handle tracking/half-frozen), and
+  `DashTo(node, park)` — a park ignores GameOver and skips CheckPickups (so it
+  finishes during a level (re)start and doesn't vacuum pickups on the way to
+  the start node); a gameplay dash still aborts on death/win. Merged the old
+  PollArrival back into DashTo. Also dropped pressThreshold 1.5→1.0 (1.5 made
+  the emulator drag-to-dash fire far too late — you could almost drag all the
+  way to the next node; the auto-recenter+dwell now carry hardware robustness
+  so the threshold can stay small). Scene YAML pressThreshold→1. Compile
+  clean, 0 errors. NOT yet re-run.
+- **NEXT (start here):** device run (restart Editor first if scripts
+  recompiled since last Play — BUGS.md #10). Verify: parks at start node, the
+  hold buzz no longer dashes on its own, a real ≥1.5 cm sustained push dashes
+  exactly one segment, dashes end quickly (not a 2 s crawl), monster handle
+  tracks smoothly, pickups blop. Tune on the Player object: **recenterRate**
+  (raise if it still self-dashes / drifts into dashes; lower if it "eats" a
+  slow deliberate push), pressThreshold (raise if ambient motion still
+  crosses it), dwellMs (fast-spike rejection), settleMs, dashSpeed
+  (fraction/s, raise = faster travel), cooldown. If it NEVER dashes on
+  hardware, recenterRate is too high (tracking out the push) — drop it toward
+  2. Then enlarge levels by moving nodes (track is
+  10×6 cm of 36×21 cm workspace), then Levels 2+3. logPress is ON — turn off
+  once tuned.
 
 Update the State section when you finish or learn something; keep the rest
 stable.
