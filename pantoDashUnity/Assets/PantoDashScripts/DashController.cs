@@ -48,10 +48,10 @@ namespace PantoDash
         {
             dashing = true;
             current = node;
-            transform.position = node.transform.position;
-            await handle.SwitchTo(gameObject, switchToSpeed);
-            await WaitForHandle();
-            handle.Free(); // player now moves the handle freely
+            // MoveToPosition = one firmware tween to the target, then Free(). This is the
+            // API that actually moves the handle on hardware; the per-frame SwitchTo drive
+            // never reaches the motor because inTransition gates FixedUpdate's re-send.
+            await handle.MoveToPosition(node.transform.position, switchToSpeed, shouldFreeHandle: true);
             cooldownUntil = Time.time + cooldown;
             dashing = false;
         }
@@ -86,27 +86,11 @@ namespace PantoDash
         {
             dashing = true;
             current = target;
-            _ = handle.SwitchTo(gameObject, switchToSpeed); // grab the handle for the dash
-            Vector3 goal = target.transform.position;
-            while (transform.position != goal)
-            {
-                if (gm.GameOver) { dashing = false; return; }
-                transform.position = Vector3.MoveTowards(transform.position, goal, dashSpeed * Time.deltaTime);
-                await Task.Yield();
-            }
-            await WaitForHandle();
-            handle.Free(); // release; player roams the new room
+            // One firmware tween moves the handle to the next room, then frees it so the
+            // player can roam. shouldFreeHandle:true => Free() at the end.
+            await handle.MoveToPosition(target.transform.position, switchToSpeed, shouldFreeHandle: true);
             cooldownUntil = Time.time + cooldown;
             dashing = false;
-        }
-
-        // The physical handle lags this object; wait until it caught up before releasing.
-        async Task WaitForHandle()
-        {
-            float deadline = Time.time + 3f;
-            float arrive = triggerRadius * 0.5f;
-            while (Vector3.Distance(handle.GetPosition(), transform.position) > arrive && Time.time < deadline)
-                await Task.Yield();
         }
     }
 }
